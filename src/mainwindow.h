@@ -4,6 +4,7 @@
 #include <QStackedLayout>
 #include <DListView>
 #include "dcitoolsview.h"
+#include "themetool.h"
 
 DWIDGET_USE_NAMESPACE
 
@@ -24,4 +25,5 @@ private:
     QStackedWidget *m_stackedWidget = nullptr;
 
     DciToolsView *m_dciToolsView = nullptr;
+    ThemeTool *m_themeTool = nullptr;
 };

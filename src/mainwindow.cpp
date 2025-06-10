@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "dcitoolsview.h"
+#include "themetool.h"
 #include <QLayout>
 #include <QStandardItemModel>
 #include <DVerticalLine>
@@ -12,6 +13,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_navList(new DListView())
     , m_stackedWidget(new QStackedWidget())
     , m_dciToolsView(new DciToolsView())
+    , m_themeTool(new ThemeTool())
 {
     initUI();
 }
@@ -40,7 +42,7 @@ void MainWindow::initUI()
     navModel->appendRow(new DStandardItem("Dci工具"));
     m_stackedWidget->addWidget(m_dciToolsView);
     navModel->appendRow(new DStandardItem("主题工具"));
-    m_stackedWidget->addWidget(new QLabel("开发中..."));
+    m_stackedWidget->addWidget(m_themeTool);
 
     navModel->appendRow(new DStandardItem("关于此工具"));
     QWidget *aboutThisToolWidget = new QWidget();

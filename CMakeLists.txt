@@ -18,8 +18,19 @@ set(PROJECT_SOURCES
     src/mainwindow.h
     src/dcitoolsview.h
     src/dcitoolsview.cpp
+    src/themetool.h
+    src/themetool.cpp
     src/funcitem.cpp
     src/funcitem.h
+    src/conversionconfig.h
+    src/themeconverter.h
+    src/themeconverter.cpp
+    src/directoryconverter.h
+    src/directoryconverter.cpp
+    src/debconverter.h
+    src/debconverter.cpp
+    src/converterfactory.h
+    src/converterfactory.cpp
 )
 
 add_executable(deepin-theme-tool ${PROJECT_SOURCES})
