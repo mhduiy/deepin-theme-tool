@@ -2,6 +2,7 @@
 #include "funcitem.h"
 #include "converterfactory.h"
 #include "themeconverter.h"
+#include "conversionworker.h"
 #include <QLayout>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -257,12 +258,12 @@ void ThemeTool::setupUI()
     
     themeGrid->addWidget(new DLabel("默认图标主题:"), 0, 0);
     m_iconThemeEdit = new DLineEdit();
-    m_iconThemeEdit->setText("bloom");
+    m_iconThemeEdit->setPlaceholderText("将自动基于源包名生成");
     themeGrid->addWidget(m_iconThemeEdit, 0, 1);
     
     themeGrid->addWidget(new DLabel("默认光标主题:"), 1, 0);
     m_cursorThemeEdit = new DLineEdit();
-    m_cursorThemeEdit->setText("bloom");
+    m_cursorThemeEdit->setPlaceholderText("将自动基于源包名生成");
     themeGrid->addWidget(m_cursorThemeEdit, 1, 1);
     
     contentLayout->addLayout(themeGrid);
@@ -400,9 +401,16 @@ void ThemeTool::connectSignals()
     connect(m_selectDarkWallpaperBtn, &DSuggestButton::clicked, this, &ThemeTool::selectDarkWallpaper);
     connect(m_selectDarkLockWallpaperBtn, &DSuggestButton::clicked, this, &ThemeTool::selectDarkLockWallpaper);
     
-    // 监听路径变化，自动填充主题名称
+    // 监听路径变化，自动填充主题名称、图标主题名和光标主题名
     connect(m_sourcePathEdit, &DLineEdit::textChanged, this, [this](const QString &path) {
-        if (path.isEmpty()) return;
+        if (path.isEmpty()) {
+            // 路径清空时，清空相关字段
+            m_themeNameEdit->clear();
+            m_iconThemeEdit->clear();
+            m_cursorThemeEdit->clear();
+            m_outputFileEdit->clear();
+            return;
+        }
         
         QFileInfo fileInfo(path);
         QString baseName = fileInfo.baseName();
@@ -410,8 +418,28 @@ void ThemeTool::connectSignals()
             baseName = fileInfo.fileName();
         }
         
+        // 自动填充主题名称
+        QString themeName = QString("%1-deepin").arg(baseName);
         if (m_themeNameEdit->text().isEmpty()) {
-            m_themeNameEdit->setText(QString("%1-deepin").arg(baseName));
+            m_themeNameEdit->setText(themeName);
+            
+            // 同时自动设置输出文件路径
+            updateOutputPath(themeName);
+        }
+        
+        // 自动填充图标主题名和光标主题名
+        if (m_iconThemeEdit->text().isEmpty()) {
+            m_iconThemeEdit->setText(themeName);
+        }
+        if (m_cursorThemeEdit->text().isEmpty()) {
+            m_cursorThemeEdit->setText(themeName);
+        }
+    });
+    
+    // 监听主题名称变化，自动更新输出路径
+    connect(m_themeNameEdit, &DLineEdit::textChanged, this, [this](const QString &themeName) {
+        if (!themeName.isEmpty()) {
+            updateOutputPath(themeName);
         }
     });
 }
@@ -477,9 +505,24 @@ void ThemeTool::selectSourceItem()
 
 void ThemeTool::selectOutputFile()
 {
+    // 获取当前主题名称以生成默认文件名
+    QString themeName = m_themeNameEdit->text().trimmed();
+    QString defaultFileName;
+    
+    if (!themeName.isEmpty()) {
+        QString cleanThemeName = themeName.toLower().replace(' ', '-');
+        defaultFileName = QString("%1.deb").arg(cleanThemeName);
+    } else {
+        defaultFileName = "theme.deb";
+    }
+    
+    // 默认路径为桌面目录
+    QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+    QString defaultPath = QDir(desktopPath).absoluteFilePath(defaultFileName);
+    
     QString fileName = QFileDialog::getSaveFileName(this, 
         "选择输出DEB包文件",
-        QStandardPaths::writableLocation(QStandardPaths::HomeLocation),
+        defaultPath,
         "DEB包文件 (*.deb)");
     
     if (!fileName.isEmpty()) {
@@ -635,33 +678,56 @@ void ThemeTool::startConversion()
     // 创建转换器并开始转换
     createConverter();
     if (m_converter) {
-        connect(m_converter, &ThemeConverter::progressChanged, 
-                this, &ThemeTool::onConversionProgress);
-        connect(m_converter, &ThemeConverter::finished, 
-                this, &ThemeTool::onConversionFinished);
-        connect(m_converter, &ThemeConverter::logMessage, 
+        // 清理之前的工作线程
+        if (m_worker) {
+            m_worker->cancel();
+            if (m_worker->isRunning()) {
+                m_worker->wait(5000); // 等待最多5秒
+            }
+            m_worker->deleteLater();
+            m_worker = nullptr;
+        }
+        
+        // 创建新的工作线程
+        m_worker = new ConversionWorker(m_converter, config, this);
+        
+        // 连接工作线程信号到主线程槽函数
+        connect(m_worker, &ConversionWorker::progressChanged, 
+                this, &ThemeTool::onConversionProgress, Qt::QueuedConnection);
+        connect(m_worker, &ConversionWorker::finished, 
+                this, &ThemeTool::onConversionFinished, Qt::QueuedConnection);
+        connect(m_worker, &ConversionWorker::logMessage, 
                 this, [this](const QString &message, int level) {
                     appendLog(message, static_cast<LogLevel>(level));
-                });
+                }, Qt::QueuedConnection);
+        
+        // 当线程完成时自动删除
+        connect(m_worker, &ConversionWorker::finished, this, [this]() {
+            if (m_worker) {
+                m_worker->deleteLater();
+                m_worker = nullptr;
+            }
+        }, Qt::QueuedConnection);
         
         // 开始转换
         emit conversionStarted();
-        m_progressTimer->start();
-        
-        // 在单独线程中执行转换（这里简化为异步调用）
-        QTimer::singleShot(100, this, [this, config]() {
-            bool success = m_converter->convert(config);
-            if (!success && !m_converter->getProgressMessage().isEmpty()) {
-                appendLog(QString("转换失败: %1").arg(m_converter->getProgressMessage()), LogLevel::Error);
-            }
-        });
+        appendLog("在后台线程中开始转换...", LogLevel::Info);
+        m_worker->start();
     }
 }
 
 void ThemeTool::stopConversion()
 {
+    appendLog("正在停止转换...", LogLevel::Warning);
+    
+    if (m_worker) {
+        m_worker->cancel();
+        if (m_worker->isRunning()) {
+            m_worker->wait(3000); // 等待最多3秒
+        }
+    }
+    
     if (m_converter) {
-        appendLog("正在停止转换...", LogLevel::Warning);
         m_converter->cancel();
     }
     
@@ -695,9 +761,19 @@ ConversionConfig ThemeTool::getConversionConfig() const
     config.windowRadius = m_windowRadiusSpin->value();
     config.windowOpacity = m_windowOpacitySpin->value();
     
-    // 主题设置
+    // 主题设置 - 如果为空则使用基于源包名的默认值
     config.iconTheme = m_iconThemeEdit->text().trimmed();
     config.cursorTheme = m_cursorThemeEdit->text().trimmed();
+    
+    // 如果图标主题名或光标主题名为空，从源路径自动生成
+    if (config.iconTheme.isEmpty() || config.cursorTheme.isEmpty()) {
+        if (config.iconTheme.isEmpty()) {
+            config.iconTheme = config.themeName;
+        }
+        if (config.cursorTheme.isEmpty()) {
+            config.cursorTheme = config.themeName;
+        }
+    }
     
     // 亮色主题设置
     config.lightWallpaper = m_wallpaperEdit->text().trimmed();
@@ -813,6 +889,28 @@ void ThemeTool::cleanupTempFiles()
         QDir tempDir(m_tempWorkDir);
         tempDir.removeRecursively();
         appendLog("已清理临时文件", LogLevel::Info);
+    }
+}
+
+void ThemeTool::updateOutputPath(const QString &themeName)
+{
+    if (themeName.isEmpty()) return;
+    
+    // 如果输出路径为空或者是基于旧主题名生成的，则自动更新
+    QString currentOutput = m_outputFileEdit->text().trimmed();
+    
+    // 获取桌面目录
+    QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+    
+    // 生成新的文件名：主题名.deb
+    QString cleanThemeName = themeName.toLower().replace(' ', '-');
+    QString newFileName = QString("%1.deb").arg(cleanThemeName);
+    QString newFilePath = QDir(desktopPath).absoluteFilePath(newFileName);
+    
+    // 只有在输出路径为空时才自动设置，避免覆盖用户手动设置的路径
+    if (currentOutput.isEmpty()) {
+        m_outputFileEdit->setText(newFilePath);
+        appendLog(QString("已自动设置输出文件: %1").arg(newFilePath), LogLevel::Info);
     }
 }
 

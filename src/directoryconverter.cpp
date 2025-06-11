@@ -513,10 +513,14 @@ bool DirectoryConverter::generateIndexTheme(const QString &configPath, const Con
     out << "Version=1.0\n";
     out << "Author=Deepin Theme Tool\n";
     out << "CreateTime=" << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
+    out << "DefaultTheme=DefaultTheme\n";
+    out << "DarkTheme=DarkTheme\n";
+    out << "Hidden=false\n";
     out << "\n";
     
     // [DefaultTheme] 节 - 亮色主题
     out << "[DefaultTheme]\n";
+    out << "AppTheme=" << "deepin" << "\n";
     out << "StandardFont=" << config.standardFont << "\n";
     out << "MonospaceFont=" << config.monospaceFont << "\n";
     out << "FontSize=" << config.fontSize << "\n";
@@ -537,6 +541,7 @@ bool DirectoryConverter::generateIndexTheme(const QString &configPath, const Con
     
     // [DarkTheme] 节 - 暗色主题
     out << "[DarkTheme]\n";
+    out << "AppTheme=" << "deepin-dark" << "\n";
     out << "StandardFont=" << config.standardFont << "\n";
     out << "MonospaceFont=" << config.monospaceFont << "\n";
     out << "FontSize=" << config.fontSize << "\n";
@@ -573,7 +578,7 @@ bool DirectoryConverter::generateDebianControl(const QString &debianDir, const C
     QTextStream out(&controlFile);
     out.setEncoding(QStringConverter::Utf8);
     
-    out << "Package: deepin-theme-" << config.themeName.toLower().replace(' ', '-') << "\n";
+    out << "Package: " << config.themeName.toLower().replace(' ', '-') << "\n";
     out << "Version: 1.0.0\n";
     out << "Section: x11\n";
     out << "Priority: optional\n";

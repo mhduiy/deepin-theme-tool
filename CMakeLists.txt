@@ -31,6 +31,8 @@ set(PROJECT_SOURCES
     src/debconverter.cpp
     src/converterfactory.h
     src/converterfactory.cpp
+    src/conversionworker.h
+    src/conversionworker.cpp
 )
 
 add_executable(deepin-theme-tool ${PROJECT_SOURCES})

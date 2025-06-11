@@ -27,6 +27,7 @@ DWIDGET_USE_NAMESPACE
 
 // 前向声明
 class ThemeConverter;
+class ConversionWorker;
 
 class ThemeTool : public QWidget
 {
@@ -93,6 +94,7 @@ private:
     bool validateConfiguration(const ConversionConfig &config);
     void createConverter();
     void cleanupTempFiles();
+    void updateOutputPath(const QString &themeName);
 
 private:
     // 基本UI组件
@@ -148,6 +150,7 @@ private:
     // 转换进程和管理
     QProcess *m_convertProcess = nullptr;
     ThemeConverter *m_converter = nullptr;
+    ConversionWorker *m_worker = nullptr;
     QTimer *m_progressTimer = nullptr;
     QString m_tempWorkDir;
 };

@@ -14,8 +14,8 @@ struct ConversionConfig {
     double fontSize = 10.5;
     int windowRadius = 12;
     double windowOpacity = 0.4;
-    QString iconTheme = "bloom";
-    QString cursorTheme = "bloom";
+    QString iconTheme;  // 将基于源包名称自动生成
+    QString cursorTheme;  // 将基于源包名称自动生成
     
     // 亮色主题配置
     QString lightWallpaper;
